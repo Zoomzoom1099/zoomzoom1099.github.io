@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FARTNITE - Join a room</title>
+<!--
+  The FARTNITE loader.  A friend opens this page, types the room code and
+  password, and the game streams straight from the host's PC over a direct
+  browser-to-browser link (PeerJS).  The game itself is never on this site:
+  this page is only the front door.  Nothing to install.
+-->
+<style>
+  :root{ --bg:#0b1a33; --card:#1d2547; --line:#36407a; --tx:#fff; --mut:#9fb4e8; --gold:#ffe84a; --bad:#ff8a6a; }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; height:100%; background:var(--bg); color:var(--tx); font:16px/1.45 "Segoe UI", Arial, sans-serif; overflow:hidden; }
+  body{ background:radial-gradient(ellipse at 50% 0%, #2a5bb8 0%, #13285a 45%, #0b1a33 100%); }
+  #ui{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; padding:16px; overflow:auto; }
+  .card{ width:100%; max-width:440px; background:linear-gradient(#232a4a,#181d36); border-radius:14px; padding:24px 24px 20px; box-shadow:0 0 0 3px rgba(255,255,255,.85), 0 18px 50px rgba(0,0,0,.5); }
+  h1{ margin:0; font:900 italic 40px/1 "Arial Black", Arial, sans-serif; color:var(--gold); text-shadow:0 4px 0 #8a5a00; letter-spacing:1px; text-align:center; }
+  .sub{ text-align:center; color:var(--mut); font:900 12px "Arial Black", Arial; letter-spacing:2px; margin:8px 0 14px; }
+  label{ display:block; font:900 11px "Arial Black", Arial; letter-spacing:1.5px; color:var(--mut); margin:12px 0 5px; }
+  input{ width:100%; background:#0f1430; border:2px solid var(--line); border-radius:8px; color:#fff; padding:11px 12px; font:800 18px "Segoe UI", Arial; outline:none; }
+  input:focus{ border-color:var(--gold); }
+  #code{ text-transform:uppercase; letter-spacing:6px; font:900 24px "Arial Black", Arial; text-align:center; }
+  button{ display:block; width:100%; height:58px; margin-top:18px; border:0; border-radius:8px; background:#fff200; color:#1a1f33; font:900 italic 26px "Arial Black", Arial; text-transform:uppercase; cursor:pointer; box-shadow:inset 0 -5px 0 rgba(0,0,0,.18); }
+  button:hover{ filter:brightness(1.06); } button:disabled{ background:#59607a; color:#aab; cursor:default; box-shadow:none; }
+  #msg{ min-height:22px; margin-top:12px; text-align:center; font-weight:800; font-size:14px; color:var(--bad); }
+  #msg.ok{ color:#8dff7a; } #msg.wait{ color:var(--gold); }
+  #bar{ height:14px; margin-top:12px; border-radius:7px; background:#0f1430; overflow:hidden; box-shadow:inset 0 0 0 2px var(--line); }
+  #bar i{ display:block; height:100%; width:0; background:linear-gradient(90deg,#ffe84a,#ffb020); transition:width .2s; }
+  .foot{ margin-top:14px; color:#7d8ab8; font-size:12px; text-align:center; line-height:1.5; }
+  .off{ display:none !important; }
+  #game{ position:fixed; inset:0; width:100%; height:100%; border:0; display:block; background:#0b1a33; }
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.4/peerjs.min.js"></script>
+</head>
+<body>
+<div id="ui"><div class="card">
+  <h1>FARTNITE</h1>
+  <div class="sub">JOIN A FRIEND'S ROOM</div>
+  <label for="name">YOUR NAME</label><input id="name" maxlength="16" autocomplete="off" spellcheck="false">
+  <label for="code">ROOM CODE</label><input id="code" maxlength="6" autocomplete="off" spellcheck="false" placeholder="ABC123">
+  <label for="pass">PASSWORD</label><input id="pass" maxlength="24" autocomplete="off" spellcheck="false">
+  <button id="go">Join</button>
+  <div id="bar" class="off"><i></i></div>
+  <div id="msg"></div>
+  <div class="foot">The game loads straight from your friend's PC. Keep this tab open while you play.</div>
+</div></div>
+<script>
+(function(){
+  'use strict';
+  var $ = function(id){ return document.getElementById(id); };
+  var ICE = { iceServers:[{ urls:['stun:stun.l.google.com:19302', 'stun:stun.cloudflare.com:3478'] }] };
+  var peer = null, ev = null, st = null, frame = null, parts = null, info = null, booted = false, busy = false, queue = [], lastRx = 0, watch = null, got = 0;
+  function msg(t, cls){ var m = $('msg'); m.textContent = t || ''; m.className = cls || ''; }
+  function bar(f){ $('bar').classList.toggle('off', f == null); if(f != null) $('bar').firstChild.style.width = Math.round(f * 100) + '%'; }
+  function ls(k, v){ try{ if(v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); }catch(e){ return null; } }
+  $('name').value = ls('fnj.name') || '';
+  var h = (location.hash || '').replace('#', '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if(h.length === 6) $('code').value = h;
+  ($('name').value ? ($('code').value ? $('pass') : $('code')) : $('name')).focus();
+
+  /* the friend's saves (keys, settings, what they wear) live here, on their own laptop */
+  var zos = {
+    get:function(k, d){ var v = ls('fnj:' + k); if(v == null) return Promise.resolve(k === 'zbi.name' ? LINK.name : d); try{ return Promise.resolve(JSON.parse(v)); }catch(e){ return Promise.resolve(d); } },
+    set:function(k, v){ try{ ls('fnj:' + k, JSON.stringify(v)); }catch(e){} return Promise.resolve(true); },
+    add:function(){ return Promise.resolve(null); }, buy:function(){ return Promise.resolve(null); }, spend:function(){ return Promise.resolve(null); },
+    tix:function(){ return Promise.resolve(null); }, owns:function(){ return Promise.resolve(false); }, openIn:function(){}, wallpaper:function(){ return Promise.resolve(null); }
+  };
+  /* the bridge the game uses (nt_net.js finds it as parent.NT_LINK) */
+  var LINK = window.NT_LINK = { v:1, pid:0, name:'', code:'', onData:null, onClose:null, zos:zos,
+    send:function(ch, m){ var c = ch === 'st' && st && st.open ? st : ev; try{ if(c && c.open) c.send(m); }catch(e){} },
+    flush:function(){ var q = queue; queue = []; for(var i = 0; i < q.length; i++) deliver(q[i]); },
+    leave:function(){ end('You left the room.', 'ok', true); }
+  };
+  function deliver(m){ if(LINK.onData){ try{ LINK.onData(m); }catch(e){ console.error(e); } } else { if(m && m.t === '_S') return; queue.push(m); if(queue.length > 400) queue.shift(); } }
+
+  function end(text, cls, mine){
+    if(mine){ try{ if(ev && ev.open) ev.send({ t:'_bye', d:{} }); }catch(e){} }
+    if(!mine && LINK.onClose){ try{ LINK.onClose(); }catch(e){} }
+    LINK.onData = null; LINK.onClose = null; queue = [];
+    clearInterval(watch); watch = null;
+    var p = peer; peer = null; ev = null; st = null;
+    setTimeout(function(){ try{ if(p) p.destroy(); }catch(e){} }, mine ? 300 : 0);
+    if(frame){ try{ frame.remove(); }catch(e){} frame = null; }
+    booted = false; busy = false; parts = null; info = null;
+    $('ui').classList.remove('off'); $('go').disabled = false; bar(null); msg(text, cls);
+    document.title = 'FARTNITE - Join a room';
+  }
+  function fail(text){ end(text, ''); }
+
+  function onData(m){
+    if(!m || typeof m.t !== 'string') return;
+    lastRx = Date.now();
+    if(m.t === '_bye'){ end('The host closed the room.', ''); return; }
+    if(m.t === '_kick'){ end('The host removed you from the room.', ''); return; }
+    if(booted){ deliver(m); return; }
+    if(m.t === '_deny'){ fail(m.d && m.d.why === 'WRONG PASSWORD' ? 'Wrong password.' : m.d && m.d.why === 'THE ROOM IS FULL' ? 'That room is full.' : 'The host said no.'); return; }
+    if(m.t === '_welcome'){
+      info = m.d; parts = new Array(info.n); got = 0; LINK.pid = info.pid; LINK.name = info.name; LINK.code = info.code;
+      msg('Loading the game from ' + 'your friend\'s PC...', 'wait'); bar(0);
+      /* the fast channel, for movement */
+      try{ st = peer.connect(ev.peer, { reliable:false, serialization:'json', label:'st', metadata:{ pid:info.pid } }); st.on('data', onData); st.on('error', function(){}); }catch(e){ st = null; }
+      return;
+    }
+    if(m.t === '_g' && parts){ if(parts[m.d.i] == null){ parts[m.d.i] = m.d.s; got++; } bar(got / parts.length * 0.97); return; }
+    if(m.t === '_gend' && parts){ if(got < parts.length){ fail('The game didn\'t arrive whole. Try again.'); return; } boot(); return; }
+    queue.push(m);
+  }
+  function gunzip(b64){
+    var bin = atob(b64), u = new Uint8Array(bin.length);
+    for(var i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+    return new Response(new Blob([u]).stream().pipeThrough(new DecompressionStream('gzip'))).text();
+  }
+  function boot(){
+    msg('Starting the game...', 'wait'); bar(1);
+    var all = parts.join(''); parts = null;
+    (info.gz ? gunzip(all) : Promise.resolve(all)).then(function(html){
+      if(!ev) return;
+      var url = URL.createObjectURL(new Blob([html], { type:'text/html' }));
+      frame = document.createElement('iframe'); frame.id = 'game'; frame.setAttribute('allow', 'fullscreen; autoplay'); frame.setAttribute('allowfullscreen', '');
+      booted = true; frame.src = url; document.body.appendChild(frame);
+      $('ui').classList.add('off'); msg(''); bar(null);
+      document.title = 'FARTNITE - Room ' + LINK.code;
+      frame.addEventListener('load', function(){ try{ frame.contentWindow.focus(); }catch(e){} });
+    }, function(){ fail('This browser couldn\'t unpack the game. Use Chrome.'); });
+  }
+  /* the ZoomOS save calls, if the game asks the old way (it's answered from here) */
+  window.addEventListener('message', function(e){
+    var d = e.data; if(!d || d.__zos !== 'save' || !e.source) return;
+    var k = d.key, p = d.op === 'get' ? zos.get(k, null) : d.op === 'set' ? zos.set(k, d.value) : Promise.resolve(null);
+    p.then(function(v){ try{ e.source.postMessage({ __zos:'res', rid:d.rid, value:v }, '*'); }catch(er){} });
+  });
+
+  function join(){
+    if(busy) return;
+    var name = $('name').value.replace(/[^\w .!?'\-#&]/g, '').trim().slice(0, 16), code = $('code').value.toUpperCase().replace(/[^A-Z0-9]/g, ''), pass = $('pass').value.trim();
+    if(!name){ msg('Type your name.'); $('name').focus(); return; }
+    if(code.length !== 6){ msg('The room code is 6 letters and numbers.'); $('code').focus(); return; }
+    if(!pass){ msg('Type the room password.'); $('pass').focus(); return; }
+    if(!window.Peer){ msg('The connection helper didn\'t load (cdnjs). Refresh the page.'); return; }
+    if(typeof DecompressionStream !== 'function'){ msg('This browser is too old. Use Chrome.'); return; }
+    ls('fnj.name', name); busy = true; $('go').disabled = true; msg('Finding the room...', 'wait');
+    try{ peer = new Peer({ config:ICE, debug:0 }); }catch(e){ fail('Couldn\'t start the connection.'); return; }
+    var p = peer, t = setTimeout(function(){ if(p === peer && !info) fail('Couldn\'t reach the host. Check the code, and that their room is still open.'); }, 20000);
+    p.on('open', function(){
+      if(p !== peer) return;
+      msg('Connecting to the host...', 'wait');
+      ev = p.connect('fartnite-' + code, { reliable:true, serialization:'json', label:'ev' });
+      ev.on('open', function(){ ev.send({ t:'_hello', d:{ name:name, pass:pass, v:1 } }); });
+      ev.on('data', onData);
+      ev.on('close', function(){ if(p === peer) end(booted ? 'The host left the room.' : 'The host closed the connection.', ''); });
+      ev.on('error', function(){});
+      lastRx = Date.now();
+      watch = setInterval(function(){ if(p !== peer) return; if(info && Date.now() - lastRx > (booted ? 12000 : 30000)) end('Lost the connection to the host.', ''); }, 1000);
+    });
+    p.on('error', function(e){
+      if(p !== peer) return; clearTimeout(t);
+      var ty = e && e.type;
+      if(ty === 'peer-unavailable') fail('No room with that code. Check it, and that the host is still in the room.');
+      else if(ty === 'network' || ty === 'server-error' || ty === 'socket-error') fail('Couldn\'t reach the matchmaker. Check the internet.');
+      else if(!booted) fail('Connection error (' + (ty || '?') + ').');
+    });
+  }
+  $('go').onclick = join;
+  ['name', 'code', 'pass'].forEach(function(id){ $(id).addEventListener('keydown', function(e){ if(e.key === 'Enter') join(); }); });
+})();
+</script>
+</body>
+</html>
