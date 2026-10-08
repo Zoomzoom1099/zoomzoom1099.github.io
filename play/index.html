@@ -83,6 +83,8 @@
     },
     buffered:function(){ return Math.max(u && u.readyState === 'open' ? u.bufferedAmount : 0, evBuf()); },
     flush:function(){ var q = queue; queue = []; for(var i = 0; i < q.length; i++) deliver(q[i]); },
+    /* (co-op: the game building the island says nothing for a while - the watch holds off ms; 0: from now) */
+    hold:function(ms){ lastRx = Date.now() + (ms || 0); },
     leave:function(){ end('You left the room.', 'ok', true); }
   };
   function evBuf(){ var dc = ev && ev.dataChannel; return (dc ? dc.bufferedAmount : 0) + (ev && ev.bufferSize || 0) * 1000; }
