@@ -41,7 +41,7 @@
   <div class="sub">JOIN A FRIEND'S ROOM</div>
   <label for="name">YOUR NAME</label><input id="name" maxlength="16" autocomplete="off" spellcheck="false">
   <label for="code">ROOM CODE</label><input id="code" maxlength="6" autocomplete="off" spellcheck="false" placeholder="ABC123">
-  <label for="pass">PASSWORD</label><input id="pass" maxlength="24" autocomplete="off" spellcheck="false">
+  <label for="pass">PASSWORD</label><input id="pass" maxlength="24" autocomplete="off" spellcheck="false" placeholder="IF THE ROOM HAS ONE">
   <button id="go">Join</button>
   <div id="bar" class="off"><i></i></div>
   <div id="msg"></div>
@@ -108,7 +108,7 @@
     if(m.t === '_bye'){ end('The host closed the room.', ''); return; }
     if(m.t === '_kick'){ end('The host removed you from the room.', ''); return; }
     if(booted){ deliver(m, n); return; }
-    if(m.t === '_deny'){ fail(m.d && m.d.why === 'WRONG PASSWORD' ? 'Wrong password.' : m.d && m.d.why === 'THE ROOM IS FULL' ? 'That room is full.' : 'The host said no.'); return; }
+    if(m.t === '_deny'){ fail(m.d && m.d.why === 'WRONG PASSWORD' ? 'Wrong password.' : m.d && m.d.why === 'THE ROOM IS FULL' ? 'That room is full.' : m.d && m.d.why === 'ZOOMNET ONLY' ? 'That room is for ZoomNet players only.' : 'The host said no.'); return; }
     if(m.t === '_welcome'){
       info = m.d; parts = new Array(info.n); got = 0; LINK.pid = info.pid; LINK.name = info.name; LINK.code = info.code;
       msg('Loading the game from ' + 'your friend\'s PC...', 'wait'); bar(0);
@@ -148,7 +148,7 @@
     var name = $('name').value.replace(/[^\w .!?'\-#&]/g, '').trim().slice(0, 16), code = $('code').value.toUpperCase().replace(/[^A-Z0-9]/g, ''), pass = $('pass').value.trim();
     if(!name){ msg('Type your name.'); $('name').focus(); return; }
     if(code.length !== 6){ msg('The room code is 6 letters and numbers.'); $('code').focus(); return; }
-    if(!pass){ msg('Type the room password.'); $('pass').focus(); return; }
+    /* (no password: an open ZoomNet room - the host says if it needs one) */
     if(!window.Peer){ msg('The connection helper didn\'t load (cdnjs). Refresh the page.'); return; }
     if(typeof DecompressionStream !== 'function'){ msg('This browser is too old. Use Chrome.'); return; }
     ls('fnj.name', name); busy = true; $('go').disabled = true;

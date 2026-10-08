@@ -1,22 +1,22 @@
 {
  "v": 1,
  "build": "c5026e64",
- "made": "2026-10-08T09:50:15.522Z",
+ "made": "2026-10-08T10:36:53.731Z",
  "keyVersion": 1,
  "keyId": "9d7fbf83",
  "core": {
-  "file": "core.761216a457.k1.bin",
-  "bytes": 361869,
-  "raw": 1311864,
-  "ph": "761216a457cabbdb",
+  "file": "core.7c554d233e.k1.bin",
+  "bytes": 372692,
+  "raw": 1350008,
+  "ph": "7c554d233e29ecb5",
   "gz": true
  },
  "apps": {
   "glooble": {
-   "file": "app-glooble.30aff3bb35.k1.bin",
-   "bytes": 154007,
-   "raw": 564709,
-   "ph": "30aff3bb3569673b",
+   "file": "app-glooble.88cbe53bf3.k1.bin",
+   "bytes": 156374,
+   "raw": 574536,
+   "ph": "88cbe53bf30d42b8",
    "gz": true
   },
   "ruckus": {
@@ -27,38 +27,38 @@
    "gz": true
   },
   "zoomvivor": {
-   "file": "app-zoomvivor.4a3f9ab886.k1.bin",
-   "bytes": 363904,
-   "raw": 1105035,
-   "ph": "4a3f9ab886c3768b",
+   "file": "app-zoomvivor.0b24b64b05.k1.bin",
+   "bytes": 363923,
+   "raw": 1105130,
+   "ph": "0b24b64b0519d6c1",
    "gz": true
   },
   "noclip": {
-   "file": "app-noclip.9d078eed5b.k1.bin",
-   "bytes": 121879,
-   "raw": 342585,
-   "ph": "9d078eed5b861a7a",
+   "file": "app-noclip.1ac0e1aff8.k1.bin",
+   "bytes": 121896,
+   "raw": 342680,
+   "ph": "1ac0e1aff8294e2b",
    "gz": true
   },
   "fartnite": {
-   "file": "app-fartnite.bb15bdd584.k1.bin",
-   "bytes": 949717,
-   "raw": 2495338,
-   "ph": "bb15bdd584c2de6f",
+   "file": "app-fartnite.3025a4aa8a.k1.bin",
+   "bytes": 953601,
+   "raw": 2507521,
+   "ph": "3025a4aa8ab77eab",
    "gz": true
   },
   "crown": {
-   "file": "app-crown.2d40cbd803.k1.bin",
-   "bytes": 65968,
-   "raw": 186277,
-   "ph": "2d40cbd80336ab79",
+   "file": "app-crown.616b60eb3c.k1.bin",
+   "bytes": 65989,
+   "raw": 186372,
+   "ph": "616b60eb3c9ad20d",
    "gz": true
   },
   "znadmin": {
-   "file": "app-znadmin.5c10fe8cbc.k1.bin",
-   "bytes": 3569,
-   "raw": 9309,
-   "ph": "5c10fe8cbc407160",
+   "file": "app-znadmin.577857f931.k1.bin",
+   "bytes": 4936,
+   "raw": 14581,
+   "ph": "577857f9314808c0",
    "gz": true
   }
  },
