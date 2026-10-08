@@ -1178,6 +1178,14 @@ function startRealtime(){
       if (!YM.live) YM.wasDown = true;
     });
   setInterval(badge, 3000);
+  /* who's online right now: presence keyed by account id only (names come from ym_people, approved-only) */
+  YM.pch = ZN.sb.channel('ym-online', { config: { presence: { key: me.id } } })
+    .on('presence', { event: 'sync' }, function(){
+      var st = {}; try { st = YM.pch.presenceState() || {}; } catch (e) {}
+      YM.online = {}; for (var k in st) YM.online[k] = true;
+      emit('ym', { type: 'presence' });
+    })
+    .subscribe(function(s){ if (s === 'SUBSCRIBED') { try { YM.pch.track({ at: Date.now() }); } catch (e) {} } });
 }
 function watch(chat){
   if (YM.tchat === chat) return;
@@ -1215,6 +1223,13 @@ ZN.ym = {
   },
   block: async function(username, on){ var r = await call('ym_block', { p_username: username, p_on: on !== false }); await loadBlocks(); emit('ym', { type: 'blocks' }); return r; },
   blocks: function(){ return YM.blocked; },
+  people: async function(){
+    var r = await ZN.rpc('ym_people');
+    if (r.error) return { ok: false, error: r.net ? 'Offline.' : r.error };
+    (r.data || []).forEach(function(p){ YM.names[p.id] = p.username; });
+    return { ok: true, list: r.data || [] };
+  },
+  online: function(id){ return !!(YM.online && YM.online[id]); },
   report: function(id, reason){ return call('ym_report', { p_message: id, p_reason: reason || '' }); },
   focus: function(chat){ YM.focus = chat || null; if (chat) watch(chat); else watch(null); },
   typing: function(chat){
