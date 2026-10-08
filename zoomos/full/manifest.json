@@ -1,0 +1,83 @@
+{
+ "v": 1,
+ "build": "c5026e64",
+ "made": "2026-10-08T09:50:15.522Z",
+ "keyVersion": 1,
+ "keyId": "9d7fbf83",
+ "core": {
+  "file": "core.761216a457.k1.bin",
+  "bytes": 361869,
+  "raw": 1311864,
+  "ph": "761216a457cabbdb",
+  "gz": true
+ },
+ "apps": {
+  "glooble": {
+   "file": "app-glooble.30aff3bb35.k1.bin",
+   "bytes": 154007,
+   "raw": 564709,
+   "ph": "30aff3bb3569673b",
+   "gz": true
+  },
+  "ruckus": {
+   "file": "app-ruckus.0b1fb63c34.k1.bin",
+   "bytes": 332316,
+   "raw": 1056295,
+   "ph": "0b1fb63c345370e9",
+   "gz": true
+  },
+  "zoomvivor": {
+   "file": "app-zoomvivor.4a3f9ab886.k1.bin",
+   "bytes": 363904,
+   "raw": 1105035,
+   "ph": "4a3f9ab886c3768b",
+   "gz": true
+  },
+  "noclip": {
+   "file": "app-noclip.9d078eed5b.k1.bin",
+   "bytes": 121879,
+   "raw": 342585,
+   "ph": "9d078eed5b861a7a",
+   "gz": true
+  },
+  "fartnite": {
+   "file": "app-fartnite.bb15bdd584.k1.bin",
+   "bytes": 949717,
+   "raw": 2495338,
+   "ph": "bb15bdd584c2de6f",
+   "gz": true
+  },
+  "crown": {
+   "file": "app-crown.2d40cbd803.k1.bin",
+   "bytes": 65968,
+   "raw": 186277,
+   "ph": "2d40cbd80336ab79",
+   "gz": true
+  },
+  "znadmin": {
+   "file": "app-znadmin.5c10fe8cbc.k1.bin",
+   "bytes": 3569,
+   "raw": 9309,
+   "ph": "5c10fe8cbc407160",
+   "gz": true
+  }
+ },
+ "assets": {
+  "kingtheme": {
+   "file": "rec-kingtheme.5d205ebe02.k1.bin",
+   "bytes": 3008915,
+   "raw": 3008887,
+   "ph": "5d205ebe02683dc9",
+   "gz": false,
+   "mime": "audio/mpeg"
+  },
+  "firelobby": {
+   "file": "rec-firelobby.a640040e51.k1.bin",
+   "bytes": 3076861,
+   "raw": 3076833,
+   "ph": "a640040e51441af7",
+   "gz": false,
+   "mime": "audio/mpeg"
+  }
+ }
+}

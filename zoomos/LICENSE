@@ -1,0 +1,12 @@
+Copyright (c) 2026 Aron McFarland. All rights reserved.
+
+ZoomOS, ZoomOS Lite, ZoomNet and everything in this repository (code, art, music,
+text and the encrypted files under full/) are private property of Aron McFarland.
+
+No licence is granted. You may use the website at its published address as a
+visitor. You may NOT copy, download for redistribution, modify, decrypt, re-host,
+mirror, sell or redistribute any part of it, in whole or in part, without written
+permission from the copyright holder.
+
+Third-party component: supabase-js (MIT licence, (c) Supabase, Inc.), included
+unmodified inside index.html.
