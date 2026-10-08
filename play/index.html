@@ -51,8 +51,8 @@
 (function(){
   'use strict';
   var $ = function(id){ return document.getElementById(id); };
-  var ICE = { iceServers:[{ urls:['stun:stun.l.google.com:19302', 'stun:stun.cloudflare.com:3478'] }] };
-  var peer = null, ev = null, st = null, frame = null, parts = null, info = null, booted = false, busy = false, queue = [], lastRx = 0, watch = null, got = 0;
+  var ICE = { iceServers:[{ urls:['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302', 'stun:stun.cloudflare.com:3478'] }] };
+  var peer = null, ev = null, st = null, u = null, tries = 0, form = null, frame = null, parts = null, info = null, booted = false, busy = false, queue = [], lastRx = 0, watch = null, got = 0;
   function msg(t, cls){ var m = $('msg'); m.textContent = t || ''; m.className = cls || ''; }
   function bar(f){ $('bar').classList.toggle('off', f == null); if(f != null) $('bar').firstChild.style.width = Math.round(f * 100) + '%'; }
   function ls(k, v){ try{ if(v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); }catch(e){ return null; } }
@@ -70,18 +70,30 @@
   };
   /* the bridge the game uses (nt_net.js finds it as parent.NT_LINK) */
   var LINK = window.NT_LINK = { v:1, pid:0, name:'', code:'', onData:null, onClose:null, zos:zos,
-    send:function(ch, m){ var c = ch === 'st' && st && st.open ? st : ev; try{ if(c && c.open) c.send(m); }catch(e){} },
+    /* movement goes on the lossy channel; if more than max is still waiting to go it's skipped (false), never queued behind */
+    send:function(ch, m, max){
+      try{
+        if(ch === 'st'){
+          if(u && u.readyState === 'open'){ if(max && u.bufferedAmount > max) return false; u.send(JSON.stringify(m)); return true; }
+          if(max && evBuf() > max) return false;
+        }
+        if(ev && ev.open){ ev.send(m); return true; }
+      }catch(e){}
+      return false;
+    },
+    buffered:function(){ return Math.max(u && u.readyState === 'open' ? u.bufferedAmount : 0, evBuf()); },
     flush:function(){ var q = queue; queue = []; for(var i = 0; i < q.length; i++) deliver(q[i]); },
     leave:function(){ end('You left the room.', 'ok', true); }
   };
-  function deliver(m){ if(LINK.onData){ try{ LINK.onData(m); }catch(e){ console.error(e); } } else { if(m && m.t === '_S') return; queue.push(m); if(queue.length > 400) queue.shift(); } }
+  function evBuf(){ var dc = ev && ev.dataChannel; return (dc ? dc.bufferedAmount : 0) + (ev && ev.bufferSize || 0) * 1000; }
+  function deliver(m, n){ if(LINK.onData){ try{ LINK.onData(m, n); }catch(e){ console.error(e); } } else { if(m && m.t === '_S') return; queue.push(m); if(queue.length > 400) queue.shift(); } }
 
   function end(text, cls, mine){
     if(mine){ try{ if(ev && ev.open) ev.send({ t:'_bye', d:{} }); }catch(e){} }
     if(!mine && LINK.onClose){ try{ LINK.onClose(); }catch(e){} }
     LINK.onData = null; LINK.onClose = null; queue = [];
     clearInterval(watch); watch = null;
-    var p = peer; peer = null; ev = null; st = null;
+    var p = peer; peer = null; ev = null; st = null; try{ if(u) u.close(); }catch(e){} u = null;
     setTimeout(function(){ try{ if(p) p.destroy(); }catch(e){} }, mine ? 300 : 0);
     if(frame){ try{ frame.remove(); }catch(e){} frame = null; }
     booted = false; busy = false; parts = null; info = null;
@@ -90,18 +102,16 @@
   }
   function fail(text){ end(text, ''); }
 
-  function onData(m){
+  function onData(m, n){
     if(!m || typeof m.t !== 'string') return;
     lastRx = Date.now();
     if(m.t === '_bye'){ end('The host closed the room.', ''); return; }
     if(m.t === '_kick'){ end('The host removed you from the room.', ''); return; }
-    if(booted){ deliver(m); return; }
+    if(booted){ deliver(m, n); return; }
     if(m.t === '_deny'){ fail(m.d && m.d.why === 'WRONG PASSWORD' ? 'Wrong password.' : m.d && m.d.why === 'THE ROOM IS FULL' ? 'That room is full.' : 'The host said no.'); return; }
     if(m.t === '_welcome'){
       info = m.d; parts = new Array(info.n); got = 0; LINK.pid = info.pid; LINK.name = info.name; LINK.code = info.code;
       msg('Loading the game from ' + 'your friend\'s PC...', 'wait'); bar(0);
-      /* the fast channel, for movement */
-      try{ st = peer.connect(ev.peer, { reliable:false, serialization:'json', label:'st', metadata:{ pid:info.pid } }); st.on('data', onData); st.on('error', function(){}); }catch(e){ st = null; }
       return;
     }
     if(m.t === '_g' && parts){ if(parts[m.d.i] == null){ parts[m.d.i] = m.d.s; got++; } bar(got / parts.length * 0.97); return; }
@@ -141,26 +151,52 @@
     if(!pass){ msg('Type the room password.'); $('pass').focus(); return; }
     if(!window.Peer){ msg('The connection helper didn\'t load (cdnjs). Refresh the page.'); return; }
     if(typeof DecompressionStream !== 'function'){ msg('This browser is too old. Use Chrome.'); return; }
-    ls('fnj.name', name); busy = true; $('go').disabled = true; msg('Finding the room...', 'wait');
-    try{ peer = new Peer({ config:ICE, debug:0 }); }catch(e){ fail('Couldn\'t start the connection.'); return; }
-    var p = peer, t = setTimeout(function(){ if(p === peer && !info) fail('Couldn\'t reach the host. Check the code, and that their room is still open.'); }, 20000);
+    ls('fnj.name', name); busy = true; $('go').disabled = true;
+    form = { name:name, code:code, pass:pass }; tries = 0;
+    attempt();
+  }
+  /* one go at it.  Anything short of a real answer from the host (no room, wrong password, full) gets another go, by itself:
+     a fresh connection each time, up to four */
+  var TRIES = 4;
+  function again(why){
+    var p = peer; peer = null; ev = null; try{ if(u) u.close(); }catch(e){} u = null;
+    clearInterval(watch); watch = null;
+    setTimeout(function(){ try{ if(p) p.destroy(); }catch(e){} }, 0);
+    if(tries >= TRIES){ fail(why); return; }
+    setTimeout(attempt, 700);
+  }
+  function attempt(){
+    tries++; info = null; parts = null; queue = [];
+    var F = form, tag = tries > 1 ? ' (try ' + tries + ' of ' + TRIES + ')' : '';
+    msg('Finding the room...' + tag, 'wait');
+    var p;
+    try{ p = peer = new Peer({ config:ICE, debug:0 }); }catch(e){ fail('Couldn\'t start the connection.'); return; }
+    /* no answer at all in 12 s: start over */
+    var t = setTimeout(function(){ if(p === peer && !info) again('Couldn\'t reach the host. Check the code, and that their room is still open.'); }, 12000);
     p.on('open', function(){
       if(p !== peer) return;
-      msg('Connecting to the host...', 'wait');
-      ev = p.connect('fartnite-' + code, { reliable:true, serialization:'json', label:'ev' });
-      ev.on('open', function(){ ev.send({ t:'_hello', d:{ name:name, pass:pass, v:1 } }); });
-      ev.on('data', onData);
-      ev.on('close', function(){ if(p === peer) end(booted ? 'The host left the room.' : 'The host closed the connection.', ''); });
-      ev.on('error', function(){});
+      msg('Connecting to the host...' + tag, 'wait');
+      var c = ev = p.connect('fartnite-' + F.code, { reliable:true, serialization:'json', label:'ev' });
+      c.on('open', function(){
+        if(c !== ev) return;
+        /* the lossy channel: made the same way at the host's end (negotiated, id 101), unordered, never resent */
+        try{ u = c.peerConnection.createDataChannel('ntu', { negotiated:true, id:101, ordered:false, maxRetransmits:0 }); u.onmessage = function(e){ var m; try{ m = JSON.parse(e.data); }catch(er){ return; } onData(m, e.data.length); }; }catch(e){ u = null; }
+        c.send({ t:'_hello', d:{ name:F.name, pass:F.pass, v:1 } });
+      });
+      c.on('data', onData);
+      c.on('close', function(){ if(c !== ev || p !== peer) return; if(!info){ again('The host closed the connection.'); return; } end(booted ? 'The host left the room.' : 'The host closed the connection.', ''); });
+      c.on('error', function(){});
       lastRx = Date.now();
       watch = setInterval(function(){ if(p !== peer) return; if(info && Date.now() - lastRx > (booted ? 12000 : 30000)) end('Lost the connection to the host.', ''); }, 1000);
     });
     p.on('error', function(e){
-      if(p !== peer) return; clearTimeout(t);
+      if(p !== peer) return;
       var ty = e && e.type;
-      if(ty === 'peer-unavailable') fail('No room with that code. Check it, and that the host is still in the room.');
-      else if(ty === 'network' || ty === 'server-error' || ty === 'socket-error') fail('Couldn\'t reach the matchmaker. Check the internet.');
-      else if(!booted) fail('Connection error (' + (ty || '?') + ').');
+      if(info || booted){ if(!booted) fail('Connection error (' + (ty || '?') + ').'); return; }
+      clearTimeout(t);
+      /* (no room by that name: maybe the host's link to the matchmaker is just coming back - one more go, then say so) */
+      if(ty === 'peer-unavailable'){ if(tries >= 2) fail('No room with that code. Check it, and that the host is still in the room.'); else again(''); return; }
+      again(ty === 'network' || ty === 'server-error' || ty === 'socket-error' ? 'Couldn\'t reach the matchmaker. Check the internet.' : 'Connection error (' + (ty || '?') + ').');
     });
   }
   $('go').onclick = join;
