@@ -120,7 +120,7 @@
     <div id="reqstate"></div>
   </div>
 </div>
-<div id="foot">© 2026 Aron McFarland. All rights reserved. This code is private and may not be copied, modified, or redistributed without permission. · <a id="tosl">Terms</a> · build c5026e64</div>
+<div id="foot">© 2026 Aron McFarland. All rights reserved. This code is private and may not be copied, modified, or redistributed without permission. · <a id="tosl">Terms</a> · build c6026ff7</div>
 <div id="tb">
   <div id="start"><span class="ic20" id="startico"></span><span>ZoomOS</span><small>LITE</small></div>
   <div id="tasks"></div>
@@ -618,6 +618,45 @@ async function bootSync(){
   /* both changed since the last sync */
   return { mode: 'ask', remote: remote, decoded: rd, local: local };
 }
+/* The USB ZoomOS (zn_local.js): the shell is already running on this browser's own save, so nothing here wipes anything unasked.
+   The same account's save on both sides: the newer one, as bootSync.  This browser's progress from before (nobody's, or another
+   account's) and a cloud save too: ask - and the one not kept goes into a backup (zn.backup, restorable from the pill). */
+function backup(json, from){
+  try { lsSet('zn.backup', JSON.stringify({ at: Date.now(), from: from, json: json })); } catch (e) {}
+}
+async function localSync(ask){
+  if (!me || !(me.status === 'approved' || me.is_admin) || me.status === 'banned') { setStatus('off', me ? 'Cloud save is for approved accounts.' : 'Log in to save to ZoomNet.'); return { mode: 'off' }; }
+  S.rev = Number(kept('zn.rev') || 0); S.synced = kept('zn.synced');
+  var owner = kept('zn.owner'), mine = owner === me.id, local = collect(), remote = null, rd = null;
+  if (!mine) { S.rev = 0; S.synced = null; }
+  setStatus('saving');
+  try { remote = await remoteFull(); } catch (e) { setStatus('error', isNet(e) ? 'Offline - will retry.' : ((e && e.message) || 'Cloud save error')); return { mode: 'error' }; }
+  if (!remote) { keep('zn.owner', me.id); S.rev = 0; setStatus('saved', ''); if (!local.empty) schedule(2000); return { mode: 'local' }; }
+  try { rd = await decode(remote.data); } catch (e) { setStatus('error', 'The cloud save did not read (' + e.message + ').'); return { mode: 'error' }; }
+  var cloud = function(){
+    if (!local.empty && local.hash !== S.synced) backup(local.json, 'this computer');
+    applyMap(rd.map); markSynced(remote.rev, rd.hash); ZN.leaving = true; location.reload(); return { mode: 'cloud' };
+  };
+  if (rd.hash === local.hash) { markSynced(remote.rev, rd.hash); setStatus('saved', ''); return { mode: 'same' }; }
+  if (local.empty) return cloud();
+  if (mine && local.hash === S.synced) return cloud();
+  if (mine && remote.rev === S.rev) { setStatus('saved', ''); schedule(3000); return { mode: 'local' }; }
+  var useCloud = ask ? await ask({ remote: remote, local: local, mine: mine, user: me.username }) : true;
+  if (useCloud) return cloud();
+  backup(JSON.stringify(rd.map), 'ZoomNet');
+  keep('zn.owner', me.id); S.rev = remote.rev; S.conflict = null;
+  await push(true);
+  return { mode: 'local' };
+}
+function backupInfo(){ try { var b = JSON.parse(lsGet('zn.backup') || 'null'); return b && b.json ? { at: b.at, from: b.from } : null; } catch (e) { return null; } }
+async function restoreBackup(){
+  var b = null; try { b = JSON.parse(lsGet('zn.backup') || 'null'); } catch (e) {}
+  if (!b || !b.json) return false;
+  var cur = collect(); applyMap(JSON.parse(b.json));
+  backup(cur.json, 'before the restore');
+  if (canSave()) { S.conflict = null; await push(true); }
+  ZN.leaving = true; location.reload(); return true;
+}
 function resolveBoot(res, useCloud){
   if (useCloud) { applyMap(res.decoded.map); markSynced(res.remote.rev, res.decoded.hash); }
   else { S.rev = res.remote.rev; }
@@ -635,7 +674,8 @@ var SAVE = ZN.save = {
     applyMap(d.map); markSynced(r.rev, d.hash); S.conflict = null;
     ZN.leaving = true; location.reload();
   },
-  collect: collect, bootSync: bootSync, resolveBoot: resolveBoot, _S: S
+  collect: collect, bootSync: bootSync, resolveBoot: resolveBoot, _S: S,
+  localSync: localSync, backupInfo: backupInfo, restoreBackup: restoreBackup
 };
 window.znSave = SAVE;
 
@@ -852,11 +892,26 @@ function addPill(){
     menu.innerHTML = '<b></b><small></small>';
     menu.firstChild.textContent = (me ? me.username : '') + (me && me.is_admin ? ' · admin' : '');
     menu.childNodes[1].textContent = line;
-    var b1 = document.createElement('button'); b1.textContent = 'Save now';
-    b1.onclick = function(){ push(false); };
-    var b2 = document.createElement('button'); b2.textContent = 'Log out'; b2.className = 'warn';
-    b2.onclick = function(){ b2.textContent = 'Saving, then logging out...'; ZN.auth.logOut(); };
-    menu.appendChild(b1); menu.appendChild(b2);
+    if (!me) {
+      menu.firstChild.textContent = 'ZoomNet';
+      menu.childNodes[1].textContent = 'Not logged in. Log in for cloud saves, youMessage, online rooms and leaderboards.';
+      var bi = document.createElement('button'); bi.textContent = 'Log in or sign up';
+      bi.onclick = function(){ menu.classList.remove('on'); ZN.ui.login(); };
+      menu.appendChild(bi);
+    } else {
+      var b1 = document.createElement('button'); b1.textContent = 'Save now';
+      b1.onclick = function(){ push(false); };
+      var b2 = document.createElement('button'); b2.textContent = 'Log out'; b2.className = 'warn';
+      b2.onclick = function(){ b2.textContent = 'Saving, then logging out...'; ZN.auth.logOut(); };
+      menu.appendChild(b1); menu.appendChild(b2);
+    }
+    var bk = backupInfo();
+    if (bk) {
+      var b3 = document.createElement('button');
+      b3.textContent = 'Restore the backup (' + (bk.from || 'older') + ', ' + new Date(bk.at).toLocaleDateString() + ')';
+      b3.onclick = function(){ if (confirm('Swap in the backed-up progress? What is here now becomes the backup instead.')) restoreBackup(); };
+      menu.appendChild(b3);
+    }
     if (s.status === 'conflict' && s.conflict) {
       bar.innerHTML = '<div></div>';
       bar.firstChild.textContent = 'Your ZoomOS save was changed in another tab or on another device (' + (s.conflict.device || 'unknown') + ', ' + when(s.conflict.at) + '). Cloud saving is paused until you pick one.';
@@ -1261,7 +1316,8 @@ ZN.shellHook = function(){
   });
   if (hookBase) hookBase();
   window.addEventListener('message', onScoreMsg);
-  setTimeout(startRealtime, 1500);
+  setTimeout(function(){ Promise.resolve(ZN.ready).then(startRealtime, function(){}); }, 1500);
+  ZN.on('user', function(x){ if (x) setTimeout(startRealtime, 500); });
   setTimeout(function(){ backfill(function(k){ return window.ZOS_SAVE ? ZOS_SAVE.get(k) : null; }); }, 12000);
 };
 })();
